@@ -1,0 +1,11 @@
+node_modules
+dist
+dev-dist
+.vercel
+.vite.pid
+*.tmp.mjs
+
+# Secretos: nunca subir credenciales
+.env
+.env.*
+!.env.example

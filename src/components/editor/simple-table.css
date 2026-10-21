@@ -1,0 +1,30 @@
+
+        .st-menu-item {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+width: 100%;
+padding: 0.4rem 0.5rem;
+border-radius: 0.5rem;
+font-size: 0.8125rem;
+color: #334155;
+cursor: pointer;
+user-select: none;
+outline: none;
+        }
+        .st-menu-item:hover,
+        .st-menu-item[data-highlighted] {
+background: #f1f5f9;
+        }
+        .st-menu-item[data-disabled] {
+opacity: 0.5;
+pointer-events: none;
+        }
+        .st-menu-item--danger {
+color: #dc2626;
+        }
+        .st-menu-item--danger:hover,
+        .st-menu-item--danger[data-highlighted] {
+background: #fef2f2;
+        }
+      
