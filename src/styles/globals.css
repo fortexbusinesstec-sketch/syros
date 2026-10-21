@@ -265,3 +265,145 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   BPMN Modeler - Modern Canvas, Montserrat Typography & Docked Palette
+   ========================================================================== */
+.bpmn-canvas,
+.bpmn-canvas svg,
+.bpmn-canvas svg text,
+.bpmn-canvas svg tspan,
+.bpmn-canvas .djs-label,
+.bpmn-canvas .djs-element text,
+.bpmn-canvas .djs-palette,
+.bpmn-canvas .djs-context-pad,
+.bpmn-canvas .djs-popup {
+  font-family: "Montserrat", var(--font-sans, system-ui, sans-serif) !important;
+}
+
+/* Contenedor del canvas BPMN */
+.bpmn-canvas {
+  position: relative;
+  background-color: var(--surface);
+}
+
+.bpmn-canvas .djs-container {
+  display: flex !important;
+  flex-direction: row !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  background-color: transparent !important;
+}
+
+/* Paleta izquierda fija y anclada (barra de herramientas dedicada, nunca flota sobre el diagrama) */
+.bpmn-canvas .djs-palette {
+  position: relative !important;
+  order: -1 !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  height: 100% !important;
+  width: 52px !important;
+  min-width: 52px !important;
+  max-width: 52px !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.04) !important;
+  padding: 10px 4px !important;
+  z-index: 20 !important;
+  flex-shrink: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              min-width 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.22s ease,
+              opacity 0.18s ease !important;
+}
+
+/* Ocultar botón nativo de colapso de bpmn-js si existe para no duplicar */
+.bpmn-canvas .djs-palette-toggle {
+  display: none !important;
+}
+
+/* Entradas de la paleta */
+.bpmn-canvas .djs-palette-entries {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 3px !important;
+}
+
+.bpmn-canvas .djs-palette .entry {
+  width: 38px !important;
+  height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  margin: 0 !important;
+  color: var(--foreground) !important;
+  transition: background-color 0.15s ease, transform 0.12s ease !important;
+}
+.bpmn-canvas .djs-palette .entry:hover {
+  background-color: var(--surface-secondary) !important;
+  transform: scale(1.08) !important;
+}
+
+/* Estado colapsado: la paleta se pliega y el canvas toma el 100% */
+.bpmn-palette-collapsed .djs-palette {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-right: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+/* Lienzo SVG con cuadrícula sutil */
+.bpmn-canvas .djs-container > svg {
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  background-color: #fafbfd !important;
+  background-image: radial-gradient(circle at center, #cbd5e1 1.25px, transparent 1.25px) !important;
+  background-size: 20px 20px !important;
+}
+.dark .bpmn-canvas .djs-container > svg,
+[data-theme="dark"] .bpmn-canvas .djs-container > svg {
+  background-color: #0d1117 !important;
+  background-image: radial-gradient(circle at center, #263040 1.25px, transparent 1.25px) !important;
+}
+
+/* Context Pad moderno */
+.bpmn-canvas .djs-context-pad .entry {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: transform 0.12s ease;
+}
+.bpmn-canvas .djs-context-pad .entry:hover {
+  transform: scale(1.08);
+}
+
+/* Handles de redimensionamiento visibles y con diseño refinado */
+.bpmn-canvas .djs-resizer {
+  display: block !important;
+}
+.bpmn-canvas .djs-resizer rect {
+  fill: #0066cc !important;
+  stroke: #ffffff !important;
+  stroke-width: 1.5px !important;
+  rx: 2px !important;
+  ry: 2px !important;
+}
+
+
