@@ -267,6 +267,24 @@ export async function listNotes() {
   }));
 }
 
+export async function getNote(noteId: string) {
+  const row = await one("SELECT * FROM general_notes WHERE id = ?", [noteId]);
+  if (!row) return null;
+  const tags = await all(
+    "SELECT t.name FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = ? ORDER BY t.name",
+    [noteId],
+  );
+  return {
+    id: str(row.id),
+    title: str(row.title),
+    content: optStr(row.content),
+    category: optStr(row.category),
+    tags: tags.map((tag) => str(tag.name)),
+    created_at: iso(row.created_at),
+    updated_at: iso(row.updated_at),
+  };
+}
+
 export async function listCourses() {
   const rows = await all(
     "SELECT * FROM courses_certifications ORDER BY completion_date IS NOT NULL, completion_date DESC, created_at DESC",
@@ -280,6 +298,20 @@ export async function listCourses() {
     learning_doc: optStr(row.learning_doc),
     created_at: iso(row.created_at),
   }));
+}
+
+export async function getCourse(courseId: string) {
+  const row = await one("SELECT * FROM courses_certifications WHERE id = ?", [courseId]);
+  if (!row) return null;
+  return {
+    id: str(row.id),
+    name: str(row.name),
+    platform: optStr(row.platform),
+    completion_date: optStr(row.completion_date),
+    certificate_url: optStr(row.certificate_url),
+    learning_doc: optStr(row.learning_doc),
+    created_at: iso(row.created_at),
+  };
 }
 
 function mapTemplate(row: Row) {

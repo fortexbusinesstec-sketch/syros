@@ -3,7 +3,6 @@ import {
   Button,
   Card,
   Chip,
-  Modal,
   SearchField,
 } from "@heroui/react";
 import {
@@ -15,17 +14,22 @@ import {
   ExternalLink,
   FileText,
   GraduationCap,
+  Pencil,
+  Plus,
   Search,
   StickyNote,
   Workflow,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
 } from "@/components/common/StateMessage";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useApi } from "@/lib/api";
+import { RecordFormModal, type FieldDef } from "@/components/records/RecordFormModal";
+import { toFormValues, useRecordModal } from "@/components/records/helpers";
+import { ApiError, mutate, useApi } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { NOTE_CATEGORIES } from "@/types/domain";
 import type { CourseCertification, GeneralNote, NoteCategory } from "@/types";
@@ -71,14 +75,63 @@ function styleFor(note: GeneralNote) {
   return categoryStyles[note.category ?? "none"] ?? categoryStyles.none;
 }
 
+const COURSE_FIELDS: FieldDef[] = [
+  { name: "name", label: "Nombre del curso", kind: "text", required: true, wide: true },
+  { name: "platform", label: "Plataforma", kind: "text", placeholder: "Ej. Coursera" },
+  { name: "completion_date", label: "Fecha de finalización", kind: "date" },
+  {
+    name: "certificate_url",
+    label: "URL del certificado",
+    kind: "text",
+    wide: true,
+    placeholder: "https://...",
+  },
+];
+
 function CoursesSection() {
+  const navigate = useNavigate();
   const { data, loading, error, reload } =
     useApi<CourseCertification[]>("/courses");
+  const courseModal = useRecordModal<CourseCertification>();
   const courses = data ?? [];
+
+  const saveCourse = async (values: Record<string, string | null>) => {
+    if (courseModal.record) {
+      await mutate("PATCH", `/courses/${courseModal.record.id}`, values);
+    } else {
+      const { id } = await mutate<{ id: string }>("POST", "/courses", values);
+      navigate(`/knowledge/courses/${id}`);
+    }
+  };
+
+  const modal = (
+    <RecordFormModal
+      key={`course-${courseModal.key}`}
+      isOpen={courseModal.open}
+      onOpenChange={courseModal.setOpen}
+      icon={GraduationCap}
+      title={courseModal.record ? "Editar curso" : "Nuevo curso"}
+      subtitle="Formación y certificaciones"
+      fields={COURSE_FIELDS}
+      initialValues={
+        courseModal.record
+          ? toFormValues(courseModal.record, COURSE_FIELDS.map((field) => field.name))
+          : {}
+      }
+      submitLabel={courseModal.record ? "Guardar cambios" : "Crear curso"}
+      onSubmit={saveCourse}
+      deleteLabel="Eliminar curso"
+      onDelete={
+        courseModal.record
+          ? () => mutate("DELETE", `/courses/${courseModal.record!.id}`).then(() => undefined)
+          : undefined
+      }
+    />
+  );
 
   return (
     <section aria-labelledby="learning-heading">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-3">
         <div>
           <h2
             id="learning-heading"
@@ -90,10 +143,21 @@ function CoursesSection() {
             Formación registrada y su estado
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-muted">
-          <GraduationCap className="size-3.5" />
-          {courses.length} programas
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden items-center gap-1.5 text-[10px] text-muted sm:inline-flex">
+            <GraduationCap className="size-3.5" />
+            {courses.length} programas
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={() => courseModal.openNew()}
+            className="h-8 gap-1.5 rounded-lg text-[10.5px]"
+          >
+            <Plus className="size-3.5" />
+            Nuevo curso
+          </Button>
+        </div>
       </div>
 
       {error && !data ? (
@@ -112,32 +176,57 @@ function CoursesSection() {
                   <p className="line-clamp-2 text-[11.5px] font-semibold leading-snug">
                     {course.name}
                   </p>
-                  <span
-                    className={
-                      course.completion_date
-                        ? "shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                        : "shrink-0 rounded bg-surface-secondary px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-muted"
-                    }
-                  >
-                    {course.completion_date ? "Completado" : "En curso"}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span
+                      className={
+                        course.completion_date
+                          ? "rounded bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                          : "rounded bg-surface-secondary px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-muted"
+                      }
+                    >
+                      {course.completion_date ? "Completado" : "En curso"}
+                    </span>
+                    <Button
+                      isIconOnly
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Editar ${course.name}`}
+                      onPress={() => courseModal.openEdit(course)}
+                      className="size-6 min-w-6 rounded-md text-muted"
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                  </div>
                 </div>
                 <p className="mt-1 text-[9.5px] text-muted">
                   {course.platform ?? "Plataforma sin registrar"}
                   {course.completion_date &&
                     ` · ${formatDate(course.completion_date)}`}
                 </p>
-                {course.certificate_url && (
-                  <a
-                    href={course.certificate_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1 text-[10px] font-medium text-brand hover:underline"
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  {course.certificate_url ? (
+                    <a
+                      href={course.certificate_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-brand hover:underline"
+                    >
+                      <ExternalLink className="size-3" />
+                      Ver certificado
+                    </a>
+                  ) : (
+                    <span />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => navigate(`/knowledge/courses/${course.id}`)}
+                    className="h-7 gap-1 rounded-md px-2 text-[9.5px] font-medium text-brand"
                   >
-                    <ExternalLink className="size-3" />
-                    Ver certificado
-                  </a>
-                )}
+                    <FileText className="size-3" />
+                    Apuntes
+                  </Button>
+                </div>
               </Card.Content>
             </Card>
           ))}
@@ -146,20 +235,54 @@ function CoursesSection() {
         <EmptyState
           icon={GraduationCap}
           title="Aún no hay cursos registrados"
+          description="Registra cursos y certificaciones para llevar el control de tu formación."
+          action={
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => courseModal.openNew()}
+              className="h-8 gap-1.5 rounded-lg text-[11px]"
+            >
+              <Plus className="size-3.5" />
+              Nuevo curso
+            </Button>
+          }
         />
       )}
+
+      {modal}
     </section>
   );
 }
 
 export function KnowledgeBasePage() {
+  const navigate = useNavigate();
   const { data, loading, error, reload } = useApi<GeneralNote[]>("/notes");
   const [query, setQuery] = useState("");
   const [category, setCategory] =
     useState<(typeof categories)[number]>("Todas");
-  const [selectedNote, setSelectedNote] = useState<GeneralNote | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   const notes = useMemo(() => data ?? [], [data]);
+
+  const createNote = async () => {
+    setCreating(true);
+    setCreateError("");
+    try {
+      const { id } = await mutate<{ id: string }>("POST", "/notes", {
+        title: "Nueva nota",
+        content: "",
+      });
+      navigate(`/knowledge/${id}`);
+    } catch (caught) {
+      setCreateError(
+        caught instanceof ApiError ? caught.message : "No se pudo crear la nota.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const filteredNotes = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -183,12 +306,30 @@ export function KnowledgeBasePage() {
         title="Base de conocimiento"
         description="Notas, estándares y aprendizajes reutilizables para cada implementación."
         actions={
-          <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-surface px-2.5 py-1.5 text-[10.5px] text-muted">
-            <BookOpenCheck className="size-3.5 text-brand" />
-            {notes.length} notas
-          </div>
+          <>
+            <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-surface px-2.5 py-1.5 text-[10.5px] text-muted">
+              <BookOpenCheck className="size-3.5 text-brand" />
+              {notes.length} notas
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              isPending={creating}
+              onPress={() => void createNote()}
+              className="h-8 gap-1.5 rounded-lg text-[10.5px]"
+            >
+              <Plus className="size-3.5" />
+              Nueva nota
+            </Button>
+          </>
         }
       />
+
+      {createError && (
+        <p role="alert" className="text-[11px] text-danger">
+          {createError}
+        </p>
+      )}
 
       <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-surface p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="app-scrollbar flex items-center gap-1 overflow-x-auto">
@@ -282,10 +423,10 @@ export function KnowledgeBasePage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onPress={() => setSelectedNote(note)}
+                      onPress={() => navigate(`/knowledge/${note.id}`)}
                       className="h-7 gap-1 rounded-md px-2 text-[9.5px] font-medium text-brand"
                     >
-                      Leer
+                      Abrir
                       <ArrowUpRight className="size-3" />
                     </Button>
                   </div>
@@ -301,78 +442,27 @@ export function KnowledgeBasePage() {
           description={
             notes.length
               ? "Prueba otro término o cambia la categoría seleccionada."
-              : "Las notas que registres en la base de datos aparecerán aquí."
+              : "Crea tu primera nota con el editor de documentos."
+          }
+          action={
+            !notes.length ? (
+              <Button
+                variant="primary"
+                size="sm"
+                isPending={creating}
+                onPress={() => void createNote()}
+                className="h-8 gap-1.5 rounded-lg text-[11px]"
+              >
+                <Plus className="size-3.5" />
+                Nueva nota
+              </Button>
+            ) : undefined
           }
           className="py-16"
         />
       )}
 
       <CoursesSection />
-
-      <Modal.Backdrop
-        isOpen={Boolean(selectedNote)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedNote(null);
-        }}
-      >
-        <Modal.Container size="lg" scroll="inside" placement="center">
-          <Modal.Dialog className="max-w-[600px]">
-            <Modal.CloseTrigger />
-            {selectedNote && (
-              <>
-                <Modal.Header className="gap-1 border-b border-border/70 pb-4">
-                  <Modal.Icon
-                    className={`mb-1 ${styleFor(selectedNote).className}`}
-                  >
-                    {(() => {
-                      const Icon = styleFor(selectedNote).icon;
-                      return <Icon className="size-5" />;
-                    })()}
-                  </Modal.Icon>
-                  <p className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted">
-                    {styleFor(selectedNote).label}
-                  </p>
-                  <Modal.Heading className="text-lg font-semibold leading-snug tracking-[-0.025em]">
-                    {selectedNote.title}
-                  </Modal.Heading>
-                  <p className="mt-1 text-[10px] text-muted">
-                    Actualizada el {formatDate(selectedNote.updated_at)}
-                  </p>
-                </Modal.Header>
-                <Modal.Body className="pt-4">
-                  <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted">
-                    {selectedNote.content ?? "Sin contenido"}
-                  </p>
-
-                  {selectedNote.tags.length > 0 && (
-                    <div className="mt-4">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-                        Etiquetas
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {selectedNote.tags.map((tag) => (
-                          <Chip key={tag} size="sm" variant="soft" color="default">
-                            {tag}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </Modal.Body>
-                <Modal.Footer className="border-t border-border/70 pt-4">
-                  <Button
-                    variant="primary"
-                    onPress={() => setSelectedNote(null)}
-                    className="h-9 rounded-lg text-[11.5px]"
-                  >
-                    Cerrar
-                  </Button>
-                </Modal.Footer>
-              </>
-            )}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
     </div>
   );
 }

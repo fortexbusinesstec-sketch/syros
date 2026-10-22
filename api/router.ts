@@ -3,7 +3,9 @@ import { db, nowSeconds } from "./_lib/db.js";
 import { HttpError, assertSameOrigin, json, noContent, readJson } from "./_lib/http.js";
 import { createProject, deleteProject, updateProject } from "./_lib/projects.js";
 import {
+  getCourse,
   getDocument,
+  getNote,
   getTemplate,
   listCourses,
   listNotes,
@@ -155,6 +157,14 @@ async function route(request: Request): Promise<Response> {
       if (head === "notes") return json(await listNotes());
       if (head === "courses") return json(await listCourses());
       if (head === "templates") return json(await listTemplates());
+    } else if (head === "notes") {
+      const note = await getNote(id);
+      if (!note) throw new HttpError(404, "Nota no encontrada");
+      return json(note);
+    } else if (head === "courses") {
+      const course = await getCourse(id);
+      if (!course) throw new HttpError(404, "Curso no encontrado");
+      return json(course);
     }
   }
 

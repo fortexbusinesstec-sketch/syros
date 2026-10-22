@@ -59,6 +59,242 @@ export function sanitizeAndPrepareBpmn(rawText: string): SanitizeResult {
   }
 }
 
+export interface OrthogonalRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface OrthogonalRouteOptions {
+  /** Pasillo horizontal preferido para los retornos (feedback loops). */
+  corridorY?: number;
+  /** Nodos que la ruta debe esquivar (sin contar origen y destino). */
+  obstacles?: OrthogonalRect[];
+  /** Margen mínimo entre la ruta y los nodos. */
+  padding?: number;
+}
+
+type Point = { x: number; y: number };
+
+const EPSILON = 1;
+
+function rectBottom(rect: OrthogonalRect) {
+  return rect.y + rect.height;
+}
+
+function rectRight(rect: OrthogonalRect) {
+  return rect.x + rect.width;
+}
+
+/** ¿El segmento vertical `x` entre `y1..y2` atraviesa el rectángulo? */
+function verticalHitsRect(x: number, y1: number, y2: number, rect: OrthogonalRect, padding: number) {
+  const top = Math.min(y1, y2);
+  const bottom = Math.max(y1, y2);
+  return (
+    x > rect.x - padding &&
+    x < rectRight(rect) + padding &&
+    bottom > rect.y - padding &&
+    top < rectBottom(rect) + padding
+  );
+}
+
+/** ¿El segmento horizontal `y` entre `x1..x2` atraviesa el rectángulo? */
+function horizontalHitsRect(y: number, x1: number, x2: number, rect: OrthogonalRect, padding: number) {
+  const left = Math.min(x1, x2);
+  const right = Math.max(x1, x2);
+  return (
+    y > rect.y - padding &&
+    y < rectBottom(rect) + padding &&
+    right > rect.x - padding &&
+    left < rectRight(rect) + padding
+  );
+}
+
+function isVerticalClear(
+  x: number,
+  y1: number,
+  y2: number,
+  obstacles: OrthogonalRect[],
+  padding: number,
+) {
+  return obstacles.every((rect) => !verticalHitsRect(x, y1, y2, rect, padding));
+}
+
+function isHorizontalClear(
+  y: number,
+  x1: number,
+  x2: number,
+  obstacles: OrthogonalRect[],
+  padding: number,
+) {
+  return obstacles.every((rect) => !horizontalHitsRect(y, x1, x2, rect, padding));
+}
+
+/** Busca un pasillo vertical libre cerca del punto medio horizontal. */
+function findClearMidX(
+  startX: number,
+  endX: number,
+  y1: number,
+  y2: number,
+  obstacles: OrthogonalRect[],
+  padding: number,
+) {
+  const low = Math.min(startX, endX);
+  const high = Math.max(startX, endX);
+  const mid = Math.round((startX + endX) / 2);
+  for (let delta = 0; delta <= high - low; delta += 8) {
+    for (const candidate of [mid + delta, mid - delta]) {
+      if (candidate <= low || candidate >= high) continue;
+      if (isVerticalClear(candidate, y1, y2, obstacles, padding)) return candidate;
+    }
+  }
+  return mid;
+}
+
+/** Busca un pasillo horizontal libre cerca del punto medio vertical. */
+function findClearMidY(
+  startY: number,
+  endY: number,
+  x1: number,
+  x2: number,
+  obstacles: OrthogonalRect[],
+  padding: number,
+) {
+  const low = Math.min(startY, endY);
+  const high = Math.max(startY, endY);
+  const mid = Math.round((startY + endY) / 2);
+  for (let delta = 0; delta <= high - low; delta += 8) {
+    for (const candidate of [mid + delta, mid - delta]) {
+      if (candidate <= low || candidate >= high) continue;
+      if (isHorizontalClear(candidate, x1, x2, obstacles, padding)) return candidate;
+    }
+  }
+  return mid;
+}
+
+/** Quita puntos duplicados y vértices intermedios que no aportan un giro. */
+function cleanWaypoints(points: Point[]): Point[] {
+  const deduped: Point[] = [];
+  for (const point of points) {
+    const rounded = { x: Math.round(point.x), y: Math.round(point.y) };
+    const previous = deduped[deduped.length - 1];
+    if (previous && Math.abs(previous.x - rounded.x) < EPSILON && Math.abs(previous.y - rounded.y) < EPSILON) {
+      continue;
+    }
+    deduped.push(rounded);
+  }
+
+  return deduped.filter((point, index) => {
+    if (index === 0 || index === deduped.length - 1) return true;
+    const previous = deduped[index - 1];
+    const next = deduped[index + 1];
+    const horizontal = previous.y === point.y && point.y === next.y;
+    const vertical = previous.x === point.x && point.x === next.x;
+    return !(horizontal || vertical);
+  });
+}
+
+/**
+ * Calcula puntos de enrutamiento ortogonal (ángulos estrictos de 90°) entre dos nodos.
+ * - Sale y entra por el lado más cercano según la posición relativa.
+ * - Evita diagonales y esquiva los nodos intermedios cuando se le pasan `obstacles`.
+ * - Los retornos (target a la izquierda) usan un pasillo inferior limpio, nunca una diagonal
+ *   que cruce todo el diagrama.
+ */
+export function calculateOrthogonalWaypoints(
+  source: OrthogonalRect,
+  target: OrthogonalRect,
+  options: OrthogonalRouteOptions | number = {},
+): Point[] {
+  const config: OrthogonalRouteOptions =
+    typeof options === "number" ? { corridorY: options } : options;
+  const padding = config.padding ?? 8;
+  const obstacles = (config.obstacles ?? []).filter(
+    (rect) =>
+      !(
+        rect.x === source.x &&
+        rect.y === source.y &&
+        rect.width === source.width &&
+        rect.height === source.height
+      ) &&
+      !(
+        rect.x === target.x &&
+        rect.y === target.y &&
+        rect.width === target.width &&
+        rect.height === target.height
+      ),
+  );
+
+  const sMidX = Math.round(source.x + source.width / 2);
+  const sMidY = Math.round(source.y + source.height / 2);
+  const tMidX = Math.round(target.x + target.width / 2);
+  const tMidY = Math.round(target.y + target.height / 2);
+  const sourceBottom = Math.round(rectBottom(source));
+  const targetBottom = Math.round(rectBottom(target));
+
+  // 1) El destino está completamente por encima: salir por arriba y entrar por abajo.
+  if (targetBottom <= source.y - 10) {
+    const midY = findClearMidY(source.y, targetBottom, sMidX, tMidX, obstacles, padding);
+    return cleanWaypoints([
+      { x: sMidX, y: source.y },
+      { x: sMidX, y: midY },
+      { x: tMidX, y: midY },
+      { x: tMidX, y: targetBottom },
+    ]);
+  }
+
+  // 2) El destino está completamente por debajo: salir por abajo y entrar por arriba.
+  if (target.y >= sourceBottom + 10) {
+    const midY = findClearMidY(sourceBottom, target.y, sMidX, tMidX, obstacles, padding);
+    return cleanWaypoints([
+      { x: sMidX, y: sourceBottom },
+      { x: sMidX, y: midY },
+      { x: tMidX, y: midY },
+      { x: tMidX, y: target.y },
+    ]);
+  }
+
+  // 3) Retorno hacia la izquierda: pasillo horizontal limpio por debajo de ambos nodos.
+  if (tMidX < sMidX - 6) {
+    const desiredCorridor =
+      config.corridorY ?? Math.max(sourceBottom, targetBottom) + 45;
+    let corridorY = Math.max(desiredCorridor, Math.max(sourceBottom, targetBottom) + padding);
+    const low = Math.min(sourceBottom, targetBottom);
+    const high = Math.max(corridorY, low + padding);
+    for (let candidate = corridorY; candidate <= high + 260; candidate += 8) {
+      if (isHorizontalClear(candidate, sMidX, tMidX, obstacles, padding)) {
+        corridorY = candidate;
+        break;
+      }
+    }
+    return cleanWaypoints([
+      { x: sMidX, y: sourceBottom },
+      { x: sMidX, y: corridorY },
+      { x: tMidX, y: corridorY },
+      { x: tMidX, y: targetBottom },
+    ]);
+  }
+
+  // 4) Flujo horizontal (o casi) hacia la derecha: escalón ortogonal por el centro libre.
+  const startX = Math.round(rectRight(source));
+  const endX = Math.round(target.x);
+  if (Math.abs(sMidY - tMidY) <= 4) {
+    return cleanWaypoints([
+      { x: startX, y: sMidY },
+      { x: endX, y: tMidY },
+    ]);
+  }
+
+  const midX = findClearMidX(startX, endX, sMidY, tMidY, obstacles, padding);
+  return cleanWaypoints([
+    { x: startX, y: sMidY },
+    { x: midX, y: sMidY },
+    { x: midX, y: tMidY },
+    { x: endX, y: tMidY },
+  ]);
+}
+
 interface NodeBounds {
   id: string;
   x: number;
@@ -197,19 +433,28 @@ export function generateDiagramInterchange(xmlString: string): string {
     )
     .join("\n");
 
+
   const diEdgesXml = sequenceFlows
     .map((flow) => {
       const source = nodeMap.get(flow.sourceRef);
       const target = nodeMap.get(flow.targetRef);
 
-      const x1 = source ? source.x + source.width : 200;
-      const y1 = source ? source.y + Math.round(source.height / 2) : 200;
-      const x2 = target ? target.x : x1 + 80;
-      const y2 = target ? target.y + Math.round(target.height / 2) : y1;
+      if (!source || !target) {
+        return `      <bpmndi:BPMNEdge id="${flow.id}_di" bpmnElement="${flow.id}">
+        <di:waypoint x="200" y="200" />
+        <di:waypoint x="300" y="200" />
+      </bpmndi:BPMNEdge>`;
+      }
+
+      // Enrutamiento ortogonal a 90 grados esquivando el resto de nodos.
+      const obstacles = Array.from(nodeMap.values());
+      const points = calculateOrthogonalWaypoints(source, target, { obstacles });
+      const waypointsXml = points
+        .map((pt) => `        <di:waypoint x="${pt.x}" y="${pt.y}" />`)
+        .join("\n");
 
       return `      <bpmndi:BPMNEdge id="${flow.id}_di" bpmnElement="${flow.id}">
-        <di:waypoint x="${x1}" y="${y1}" />
-        <di:waypoint x="${x2}" y="${y2}" />
+${waypointsXml}
       </bpmndi:BPMNEdge>`;
     })
     .join("\n");
@@ -425,24 +670,359 @@ export const SAMPLE_TO_BE_BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`;
 
 /**
+ * Plantilla Maestra: Proceso de Gestión y Conciliación de Vacaciones
+ * 5 Carriles: Zoho People, Operación/Jefatura, Colaborador, Remuneraciones, Buk.
+ * 5 Fases organizadas de izquierda a derecha.
+ * Enrutamiento 100% ortogonal (90°), flujos de mensaje punteados y bucle de retorno limpio.
+ */
+export const SAMPLE_VACACIONES_ZOHO_BUK_BPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Vacaciones_Zoho_Buk" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_Vacaciones">
+    <bpmn:participant id="Participant_Proceso" name="Proceso de Gestión y Conciliación de Vacaciones" processRef="Process_Vacaciones" />
+    <bpmn:messageFlow id="Msg_Notif" name="Alerta de Saldo Disponible" sourceRef="Task_Notifica" targetRef="Task_Solicitud" />
+    <bpmn:messageFlow id="Msg_Sync" name="Sincronización API Zoho a Buk" sourceRef="Task_ZohoSync" targetRef="Task_RegistroBuk" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Vacaciones" name="Proceso de Gestión y Conciliación de Vacaciones" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_Zoho" name="Zoho People (Portal y Planificación)">
+        <bpmn:flowNodeRef>Task_ZohoSync</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Jefatura" name="Operación / Jefatura (Revisión y Aprobación)">
+        <bpmn:flowNodeRef>Task_RevisaJefe</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Aprueba</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Rechazo</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_GestionDesviacion</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Colaborador" name="Colaborador (Solicitud y Goce)">
+        <bpmn:flowNodeRef>Task_Solicitud</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Goce</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Remuneraciones" name="Remuneraciones / RR.HH. (Control y Conciliación)">
+        <bpmn:flowNodeRef>Start_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Notifica</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Concilia</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Desviacion</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Conforme</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Buk" name="Buk (Planilla y Registro Real)">
+        <bpmn:flowNodeRef>Task_Extraccion</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RegistroBuk</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <!-- Fase 1: Extracción y Detección -->
+    <bpmn:startEvent id="Start_1" name="Periodo de Vacaciones Próximo a Vencer">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_Extraccion" name="Extraer Información desde Buk (Vencidas, por Vencer y Regulares)">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:task>
+
+    <!-- Fase 2: Notificación y Solicitud -->
+    <bpmn:task id="Task_Notifica" name="Notificar Alerta de Vacaciones a Jefatura y Colaborador">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_PostNotif</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_Solicitud" name="Registrar Solicitud de Vacaciones en Zoho">
+      <bpmn:incoming>Flow_PostNotif</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_ZohoSync" name="Validar Reglas de Negocio y Saldo en Zoho People">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:task>
+
+    <!-- Fase 3: Aprobación -->
+    <bpmn:task id="Task_RevisaJefe" name="Revisar y Validar Solicitud de Vacaciones">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:incoming>Flow_Feedback</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_Aprueba" name="¿Jefatura Aprueba?">
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_Aprueba_Si</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Aprueba_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_Rechazo" name="Solicitud Desestimada">
+      <bpmn:incoming>Flow_Aprueba_No</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Fase 4: Ejecución y Registro -->
+    <bpmn:task id="Task_Goce" name="Goce Efectivo de Días de Vacaciones">
+      <bpmn:incoming>Flow_Aprueba_Si</bpmn:incoming>
+      <bpmn:outgoing>Flow_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_RegistroBuk" name="Registrar y Descontar Días en Planilla Buk">
+      <bpmn:incoming>Flow_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_7</bpmn:outgoing>
+    </bpmn:task>
+
+    <!-- Fase 5: Conciliación y Bucle de Desviaciones -->
+    <bpmn:task id="Task_Concilia" name="Comparar Planificado en Zoho vs. Ejecutado en Buk">
+      <bpmn:incoming>Flow_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_Desviacion" name="¿Existe Desviación?">
+      <bpmn:incoming>Flow_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_Desviacion_No</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Desviacion_Si</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_Conforme" name="Vacaciones Conciliadas Conforme (Cierre Exitoso)">
+      <bpmn:incoming>Flow_Desviacion_No</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="Task_GestionDesviacion" name="Regularizar y Replanificar Desviación">
+      <bpmn:incoming>Flow_Desviacion_Si</bpmn:incoming>
+      <bpmn:outgoing>Flow_Feedback</bpmn:outgoing>
+    </bpmn:task>
+
+    <!-- Cinta de fases del proceso -->
+    <bpmn:textAnnotation id="Phase_1">
+      <bpmn:text>FASE 1 · Extracción y detección</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Phase_2">
+      <bpmn:text>FASE 2 · Notificación y solicitud</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Phase_3">
+      <bpmn:text>FASE 3 · Revisión y aprobación</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Phase_4">
+      <bpmn:text>FASE 4 · Ejecución y registro</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Phase_5">
+      <bpmn:text>FASE 5 · Conciliación y cierre</bpmn:text>
+    </bpmn:textAnnotation>
+
+    <!-- Conectores de secuencia con ángulos ortogonales a 90 grados -->
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_Extraccion" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Extraccion" targetRef="Task_Notifica" />
+    <bpmn:sequenceFlow id="Flow_PostNotif" sourceRef="Task_Notifica" targetRef="Task_Solicitud" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_Solicitud" targetRef="Task_ZohoSync" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Task_ZohoSync" targetRef="Task_RevisaJefe" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_RevisaJefe" targetRef="Gateway_Aprueba" />
+    <bpmn:sequenceFlow id="Flow_Aprueba_No" name="No" sourceRef="Gateway_Aprueba" targetRef="End_Rechazo" />
+    <bpmn:sequenceFlow id="Flow_Aprueba_Si" name="Sí" sourceRef="Gateway_Aprueba" targetRef="Task_Goce" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_Goce" targetRef="Task_RegistroBuk" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Task_RegistroBuk" targetRef="Task_Concilia" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_Concilia" targetRef="Gateway_Desviacion" />
+    <bpmn:sequenceFlow id="Flow_Desviacion_No" name="No" sourceRef="Gateway_Desviacion" targetRef="End_Conforme" />
+    <bpmn:sequenceFlow id="Flow_Desviacion_Si" name="Sí (Desviación)" sourceRef="Gateway_Desviacion" targetRef="Task_GestionDesviacion" />
+    <bpmn:sequenceFlow id="Flow_Feedback" sourceRef="Task_GestionDesviacion" targetRef="Task_RevisaJefe" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Vacaciones">
+    <bpmndi:BPMNPlane id="BPMNPlane_Vacaciones" bpmnElement="Collaboration_Vacaciones">
+      <!-- Participante y Carriles -->
+      <bpmndi:BPMNShape id="Participant_Proceso_di" bpmnElement="Participant_Proceso" isHorizontal="true">
+        <dc:Bounds x="120" y="50" width="2000" height="745" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Zoho_di" bpmnElement="Lane_Zoho" isHorizontal="true">
+        <dc:Bounds x="150" y="50" width="1970" height="145" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Jefatura_di" bpmnElement="Lane_Jefatura" isHorizontal="true">
+        <dc:Bounds x="150" y="195" width="1970" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Colaborador_di" bpmnElement="Lane_Colaborador" isHorizontal="true">
+        <dc:Bounds x="150" y="345" width="1970" height="145" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Remuneraciones_di" bpmnElement="Lane_Remuneraciones" isHorizontal="true">
+        <dc:Bounds x="150" y="490" width="1970" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Buk_di" bpmnElement="Lane_Buk" isHorizontal="true">
+        <dc:Bounds x="150" y="640" width="1970" height="155" />
+      </bpmndi:BPMNShape>
+
+      <!-- Nodos: Fase 1 (Extracción) -->
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="200" y="547" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Extraccion_di" bpmnElement="Task_Extraccion">
+        <dc:Bounds x="280" y="677" width="160" height="80" />
+      </bpmndi:BPMNShape>
+
+      <!-- Nodos: Fase 2 (Notificación & Solicitud) -->
+      <bpmndi:BPMNShape id="Task_Notifica_di" bpmnElement="Task_Notifica">
+        <dc:Bounds x="490" y="520" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Solicitud_di" bpmnElement="Task_Solicitud">
+        <dc:Bounds x="490" y="372" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ZohoSync_di" bpmnElement="Task_ZohoSync">
+        <dc:Bounds x="720" y="82" width="150" height="80" />
+      </bpmndi:BPMNShape>
+
+      <!-- Nodos: Fase 3 (Aprobación Jefatura) -->
+      <bpmndi:BPMNShape id="Task_RevisaJefe_di" bpmnElement="Task_RevisaJefe">
+        <dc:Bounds x="940" y="230" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Aprueba_di" bpmnElement="Gateway_Aprueba" isMarkerVisible="true">
+        <dc:Bounds x="1140" y="245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rechazo_di" bpmnElement="End_Rechazo">
+        <dc:Bounds x="1320" y="205" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_GestionDesviacion_di" bpmnElement="Task_GestionDesviacion">
+        <dc:Bounds x="1790" y="230" width="150" height="80" />
+      </bpmndi:BPMNShape>
+
+      <!-- Nodos: Fase 4 (Ejecución & Planilla) -->
+      <bpmndi:BPMNShape id="Task_Goce_di" bpmnElement="Task_Goce">
+        <dc:Bounds x="1260" y="372" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RegistroBuk_di" bpmnElement="Task_RegistroBuk">
+        <dc:Bounds x="1450" y="677" width="150" height="80" />
+      </bpmndi:BPMNShape>
+
+      <!-- Nodos: Fase 5 (Conciliación & Desviaciones) -->
+      <bpmndi:BPMNShape id="Task_Concilia_di" bpmnElement="Task_Concilia">
+        <dc:Bounds x="1640" y="520" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Desviacion_di" bpmnElement="Gateway_Desviacion" isMarkerVisible="true">
+        <dc:Bounds x="1840" y="535" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Conforme_di" bpmnElement="End_Conforme">
+        <dc:Bounds x="1960" y="542" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <!-- Cinta de fases (anotaciones sobre el pool) -->
+      <bpmndi:BPMNShape id="Phase_1_di" bpmnElement="Phase_1">
+        <dc:Bounds x="150" y="12" width="230" height="26" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Phase_2_di" bpmnElement="Phase_2">
+        <dc:Bounds x="445" y="12" width="250" height="26" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Phase_3_di" bpmnElement="Phase_3">
+        <dc:Bounds x="770" y="12" width="370" height="26" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Phase_4_di" bpmnElement="Phase_4">
+        <dc:Bounds x="1250" y="12" width="290" height="26" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Phase_5_di" bpmnElement="Phase_5">
+        <dc:Bounds x="1590" y="12" width="330" height="26" />
+      </bpmndi:BPMNShape>
+
+      <!-- Conectores de Secuencia Ortogonales a 90° -->
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="218" y="583" />
+        <di:waypoint x="218" y="630" />
+        <di:waypoint x="360" y="630" />
+        <di:waypoint x="360" y="677" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="360" y="677" />
+        <di:waypoint x="360" y="638" />
+        <di:waypoint x="565" y="638" />
+        <di:waypoint x="565" y="600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PostNotif_di" bpmnElement="Flow_PostNotif">
+        <di:waypoint x="565" y="520" />
+        <di:waypoint x="565" y="452" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="565" y="372" />
+        <di:waypoint x="565" y="267" />
+        <di:waypoint x="795" y="267" />
+        <di:waypoint x="795" y="162" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="795" y="162" />
+        <di:waypoint x="795" y="196" />
+        <di:waypoint x="1015" y="196" />
+        <di:waypoint x="1015" y="230" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="1090" y="270" />
+        <di:waypoint x="1140" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Aprueba_No_di" bpmnElement="Flow_Aprueba_No">
+        <di:waypoint x="1190" y="270" />
+        <di:waypoint x="1255" y="270" />
+        <di:waypoint x="1255" y="223" />
+        <di:waypoint x="1320" y="223" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Aprueba_Si_di" bpmnElement="Flow_Aprueba_Si">
+        <di:waypoint x="1165" y="295" />
+        <di:waypoint x="1165" y="334" />
+        <di:waypoint x="1335" y="334" />
+        <di:waypoint x="1335" y="372" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
+        <di:waypoint x="1335" y="452" />
+        <di:waypoint x="1335" y="565" />
+        <di:waypoint x="1525" y="565" />
+        <di:waypoint x="1525" y="677" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
+        <di:waypoint x="1525" y="677" />
+        <di:waypoint x="1525" y="638" />
+        <di:waypoint x="1720" y="638" />
+        <di:waypoint x="1720" y="600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_di" bpmnElement="Flow_8">
+        <di:waypoint x="1800" y="560" />
+        <di:waypoint x="1840" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Desviacion_No_di" bpmnElement="Flow_Desviacion_No">
+        <di:waypoint x="1890" y="560" />
+        <di:waypoint x="1960" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Desviacion_Si_di" bpmnElement="Flow_Desviacion_Si">
+        <di:waypoint x="1865" y="535" />
+        <di:waypoint x="1865" y="310" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Feedback Loop por el pasillo inferior de Jefatura (sin cruzar el diagrama) -->
+      <bpmndi:BPMNEdge id="Flow_Feedback_di" bpmnElement="Flow_Feedback">
+        <di:waypoint x="1790" y="270" />
+        <di:waypoint x="1750" y="270" />
+        <di:waypoint x="1750" y="331" />
+        <di:waypoint x="1015" y="331" />
+        <di:waypoint x="1015" y="310" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Flujos de Mensaje Punteados entre Sistemas -->
+      <bpmndi:BPMNEdge id="Msg_Notif_di" bpmnElement="Msg_Notif">
+        <di:waypoint x="610" y="520" />
+        <di:waypoint x="610" y="452" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_Sync_di" bpmnElement="Msg_Sync">
+        <di:waypoint x="870" y="122" />
+        <di:waypoint x="900" y="122" />
+        <di:waypoint x="900" y="640" />
+        <di:waypoint x="1525" y="640" />
+        <di:waypoint x="1525" y="677" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+/**
  * Prompt optimizado para copiar a Gemini y generar BPMN 2.0 compatible
  */
 export const GEMINI_BPMN_PROMPT = `Actúa como Arquitecto de Procesos y experto en BPMN 2.0.
 Crea un diagrama BPMN 2.0 en XML estándar OMG para el siguiente proceso:
 
-[ESCRIBE AQUÍ EL PROCESO, POR EJEMPLO: "Proceso AS-IS de solicitud de vacaciones donde el empleado envía correo, RRHH revisa saldo de días, si no tiene rechaza, si tiene envía al jefe para firma y luego registra en planilla"].
+[ESCRIBE AQUÍ EL PROCESO, POR EJEMPLO: "Proceso de conciliación de vacaciones entre Zoho People, Jefatura, Colaborador, Remuneraciones y Buk con bucle de ajuste"].
 
-INSTRUCCIONES OBLIGATORIAS:
+REGLAS TÉCNICAS OBLIGATORIAS:
 1. Responde ÚNICAMENTE con el bloque de código XML (sin explicaciones antes ni después).
 2. Usa namespaces estándar:
    xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
    xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
    xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
    xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-3. Incluye la sección de dibujo <bpmndi:BPMNDiagram> con coordenadas reales para que se vea en el modelador:
-   - StartEvent: width="36" height="36"
-   - Tareas (Task/UserTask/ServiceTask): width="120" height="80"
-   - Compuertas (ExclusiveGateway): width="50" height="50"
-   - EndEvent: width="36" height="36"
-   - Conecta todo con sequenceFlow y waypoints ordenados de izquierda a derecha.
-4. Todos los nombres de eventos, tareas y compuertas deben estar en español claro.`;
+3. Organización por Carriles (Lanes) y Flujo Temporal:
+   - Organiza el proceso en un Pool (<bpmn:participant>) con Lanes (<bpmn:lane>) bien delimitados.
+   - Cada tarea debe ubicarse estrictamente dentro de los límites (Y) de su carril.
+   - El flujo debe avanzar de izquierda a derecha ordenado en fases.
+4. Conectores Ortogonales (Ángulos de 90 grados):
+   - NUNCA uses líneas diagonales. Todas las conexiones deben usar waypoints ortogonales a 90°.
+   - Si una conexión cambia de carril o altura, usa waypoints en forma de escalón [x1, y1] -> [midX, y1] -> [midX, y2] -> [x2, y2].
+5. Bucles de Retorno (Feedback Loop):
+   - Si una compuerta retorna a un paso anterior a la izquierda, enrútala por un pasillo libre inferior o superior evitando atravesar tareas.
+6. Flujos entre Sistemas:
+   - Para transferencias de datos entre sistemas distintos, usa <bpmn:messageFlow> (línea discontinua/punteada).
+7. Diagrama Visual y Cinta de Fases:
+   - Incluye SIEMPRE <bpmndi:BPMNDiagram> con <bpmndi:BPMNShape> y <bpmndi:BPMNEdge>; sin eso el diagrama no se puede visualizar.
+   - Añade 5 <bpmn:textAnnotation> (Fase 1 a Fase 5) en una cinta superior sobre el pool, con sus <bpmndi:BPMNShape>.
+   - Respeta los límites de cada lane: ningún nodo puede quedar fuera de su <dc:Bounds> de carril.`;

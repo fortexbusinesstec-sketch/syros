@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Circle,
   ListChecks,
+  Plus,
   TriangleAlert,
 } from "lucide-react";
 import {
@@ -13,10 +14,13 @@ import {
   LoadingState,
 } from "@/components/common/StateMessage";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RecordFormModal, type FieldDef } from "@/components/records/RecordFormModal";
+import { toFormValues, useRecordModal } from "@/components/records/helpers";
 import { ApiError, mutate, useApi } from "@/lib/api";
 import { PRIORITY_META } from "@/lib/constants";
 import { cn, daysUntil, formatShortDate } from "@/lib/utils";
-import type { ReminderStatus, TaskReminder } from "@/types";
+import { PRIORITIES, REMINDER_STATUSES } from "@/types/domain";
+import type { Project, ReminderStatus, TaskReminder } from "@/types";
 
 type TaskFilter = "Todas" | "Pendientes" | "Completadas";
 
@@ -25,6 +29,22 @@ const filterOptions: TaskFilter[] = [
   "Pendientes",
   "Completadas",
 ];
+
+function taskFields(projects: Project[]): FieldDef[] {
+  return [
+    { name: "title", label: "Tarea", kind: "text", required: true, wide: true },
+    { name: "due_date", label: "Fecha límite", kind: "date" },
+    { name: "status", label: "Estado", kind: "select", options: REMINDER_STATUSES, required: true },
+    { name: "priority", label: "Prioridad", kind: "select", options: PRIORITIES, required: true },
+    {
+      name: "project_id",
+      label: "Proyecto",
+      kind: "select",
+      options: projects.map((project) => ({ value: project.id, label: project.name })),
+    },
+    { name: "description", label: "Descripción", kind: "textarea", rows: 3 },
+  ];
+}
 
 function dueLabel(task: TaskReminder) {
   if (task.status === "Completado") return "Completada";
@@ -57,6 +77,10 @@ const groupOrder = [
 
 export function TasksPage() {
   const { data, loading, error, reload } = useApi<TaskReminder[]>("/reminders");
+  const projectsQuery = useApi<Project[]>("/projects");
+  const taskModal = useRecordModal<TaskReminder>();
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  const fields = useMemo(() => taskFields(projects), [projects]);
   const [filter, setFilter] = useState<TaskFilter>("Todas");
   // Cambios de estado ya enviados que aún no llegan en la siguiente lectura.
   const [optimistic, setOptimistic] = useState<Record<string, ReminderStatus>>({});
@@ -117,6 +141,39 @@ export function TasksPage() {
     }
   };
 
+  const saveTask = async (values: Record<string, string | null>) => {
+    if (taskModal.record) await mutate("PATCH", `/reminders/${taskModal.record.id}`, values);
+    else await mutate("POST", "/reminders", values);
+  };
+
+  const newTask = () =>
+    taskModal.openNew({ status: "Pendiente", priority: "Media" });
+
+  const modals = (
+    <RecordFormModal
+      key={`task-${taskModal.key}`}
+      isOpen={taskModal.open}
+      onOpenChange={taskModal.setOpen}
+      icon={ListChecks}
+      title={taskModal.record ? "Editar tarea" : "Nueva tarea"}
+      subtitle={taskModal.record ? undefined : "Recordatorio o compromiso de seguimiento"}
+      fields={fields}
+      initialValues={
+        taskModal.record
+          ? toFormValues(taskModal.record, fields.map((field) => field.name))
+          : taskModal.preset
+      }
+      submitLabel={taskModal.record ? "Guardar cambios" : "Crear tarea"}
+      onSubmit={saveTask}
+      deleteLabel="Eliminar tarea"
+      onDelete={
+        taskModal.record
+          ? () => mutate("DELETE", `/reminders/${taskModal.record!.id}`).then(() => undefined)
+          : undefined
+      }
+    />
+  );
+
   if (error && !data) {
     return <ErrorState error={error} onRetry={() => void reload()} />;
   }
@@ -129,10 +186,21 @@ export function TasksPage() {
         title="Tareas"
         description="Recordatorios y compromisos vinculados a los proyectos."
         actions={
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface px-2.5 py-1.5 text-[10.5px] text-muted">
-            <ListChecks className="size-3.5 text-brand" />
-            {openTasks.length} tareas abiertas
-          </span>
+          <>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface px-2.5 py-1.5 text-[10.5px] text-muted">
+              <ListChecks className="size-3.5 text-brand" />
+              {openTasks.length} tareas abiertas
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={newTask}
+              className="h-8 gap-1.5 rounded-lg text-[10.5px]"
+            >
+              <Plus className="size-3.5" />
+              Nueva tarea
+            </Button>
+          </>
         }
       />
 
@@ -277,7 +345,11 @@ export function TasksPage() {
                           )}
                         </Button>
 
-                        <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => taskModal.openEdit(task)}
+                          className="min-w-0 flex-1 text-left"
+                        >
                           <p
                             className={cn(
                               "text-[12px] font-medium leading-snug",
@@ -295,7 +367,7 @@ export function TasksPage() {
                               {task.description}
                             </p>
                           )}
-                        </div>
+                        </button>
 
                         <div className="hidden w-[150px] shrink-0 items-center justify-end gap-1.5 text-[10px] text-muted sm:flex">
                           <CalendarClock
@@ -339,11 +411,26 @@ export function TasksPage() {
           description={
             tasks.length
               ? "Cambia el filtro para revisar el resto de compromisos."
-              : "Las tareas y recordatorios que registres aparecerán aquí."
+              : "Crea tu primera tarea o recordatorio para empezar el seguimiento."
+          }
+          action={
+            !tasks.length ? (
+              <Button
+                variant="primary"
+                size="sm"
+                onPress={newTask}
+                className="h-8 gap-1.5 rounded-lg text-[11px]"
+              >
+                <Plus className="size-3.5" />
+                Nueva tarea
+              </Button>
+            ) : undefined
           }
           className="py-16"
         />
       )}
+
+      {modals}
     </div>
   );
 }

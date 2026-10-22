@@ -202,7 +202,7 @@ export function RecordFormModal({
                       <span className="text-sm font-medium">{field.label}</span>
                       <input
                         type="date"
-                        value={values[field.name] ?? ""}
+                        value={(values[field.name] ?? "").slice(0, 10)}
                         onChange={(event) => set(field.name, event.target.value)}
                         className="h-10 w-full rounded-xl border border-transparent bg-default px-3 text-sm text-foreground outline-none transition-colors hover:bg-default-hover focus:border-accent/50 focus:ring-2 focus:ring-accent/20 dark:[color-scheme:dark]"
                       />

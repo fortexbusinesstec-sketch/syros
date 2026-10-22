@@ -15,6 +15,7 @@ import {
   GEMINI_BPMN_PROMPT,
   SAMPLE_AS_IS_BPMN,
   SAMPLE_TO_BE_BPMN,
+  SAMPLE_VACACIONES_ZOHO_BUK_BPMN,
   sanitizeAndPrepareBpmn,
 } from "@/lib/bpmn-helper";
 
@@ -263,6 +264,29 @@ export default function BpmnAiModal({ isOpen, onOpenChange, onApplyXml }: BpmnAi
                 </p>
 
                 <div className="space-y-3">
+                  {/* Proceso Vacaciones Zoho - Buk con 5 Carriles y Enrutamiento 90° */}
+                  <div className="flex flex-col gap-2 rounded-xl border border-indigo-200/90 bg-indigo-50/40 p-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="size-2 rounded-full bg-indigo-500" />
+                        <h4 className="font-semibold text-[12.5px] text-indigo-950 dark:text-indigo-200">
+                          Proceso Vacaciones: Zoho People ↔ Buk (5 Carriles & 5 Fases)
+                        </h4>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted">
+                        Carriles: Zoho, Jefatura, Colaborador, Remuneraciones y Buk. Conectores ortogonales a 90°, flujos de mensaje punteados y bucle de feedback loop sin cruces caóticos.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onPress={() => handleLoadSample(SAMPLE_VACACIONES_ZOHO_BUK_BPMN)}
+                      className="h-8 shrink-0 gap-1.5 rounded-lg text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <Zap className="size-3.5 text-white" />
+                      Cargar Proceso Vacaciones
+                    </Button>
+                  </div>
                   <div className="flex flex-col gap-2 rounded-xl border border-amber-200/80 bg-amber-50/30 p-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/40 dark:bg-amber-950/10">
                     <div>
                       <div className="flex items-center gap-2">

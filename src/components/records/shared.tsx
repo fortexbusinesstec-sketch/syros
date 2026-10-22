@@ -6,7 +6,7 @@ import { levelColor, type ChipColor } from "@/components/records/helpers";
 export function LevelChip({ label, value }: { label?: string; value: string | null | undefined }) {
   if (!value) return <span className="text-[10px] text-muted/70">—</span>;
   return (
-    <Chip size="sm" variant="soft" color={levelColor(value)} className="shrink-0">
+    <Chip size="sm" variant="soft" color={levelColor(value)} className="shrink-0 whitespace-nowrap">
       {label ? `${label} ${value.toLowerCase()}` : value}
     </Chip>
   );
@@ -15,7 +15,7 @@ export function LevelChip({ label, value }: { label?: string; value: string | nu
 export function StatusChip({ value, done, warn }: { value: string; done?: string[]; warn?: string[] }) {
   const color: ChipColor = done?.includes(value) ? "success" : warn?.includes(value) ? "warning" : "default";
   return (
-    <Chip size="sm" variant="soft" color={color} className="shrink-0">
+    <Chip size="sm" variant="soft" color={color} className="shrink-0 whitespace-nowrap">
       {value}
     </Chip>
   );

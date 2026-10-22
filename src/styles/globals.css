@@ -287,18 +287,36 @@ body {
   background-color: var(--surface);
 }
 
+/* Arrastre del lienzo con el botón derecho */
+.bpmn-canvas.bpmn-panning,
+.bpmn-canvas.bpmn-panning * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/*
+ * La paleta es hermana del contenedor del lienzo (ver DockedPalette en BpmnEditor):
+ * el área de dibujo empieza a la derecha de la paleta, así ningún pool queda debajo y
+ * las coordenadas del ratón coinciden con las del SVG.
+ */
 .bpmn-canvas .djs-container {
-  display: flex !important;
-  flex-direction: row !important;
+  position: absolute !important;
+  inset: 0 0 0 52px !important;
+  width: auto !important;
+  height: auto !important;
+  display: block !important;
   box-sizing: border-box !important;
   overflow: hidden !important;
   background-color: transparent !important;
+  transition: left 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.bpmn-palette-collapsed .djs-container {
+  left: 0 !important;
 }
 
-/* Paleta izquierda fija y anclada (barra de herramientas dedicada, nunca flota sobre el diagrama) */
+/* Paleta izquierda anclada sobre el contenedor absoluto, nunca debajo del SVG */
 .bpmn-canvas .djs-palette {
-  position: relative !important;
-  order: -1 !important;
+  position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   bottom: 0 !important;
@@ -355,6 +373,11 @@ body {
   transform: scale(1.08) !important;
 }
 
+/* El desplazamiento se resuelve con barras y arrastre; el hand tool no es necesario. */
+.bpmn-canvas .djs-palette .entry[data-action="hand-tool"] {
+  display: none !important;
+}
+
 /* Estado colapsado: la paleta se pliega y el canvas toma el 100% */
 .bpmn-palette-collapsed .djs-palette {
   width: 0 !important;
@@ -368,12 +391,12 @@ body {
   overflow: hidden !important;
 }
 
-/* Lienzo SVG con cuadrícula sutil */
+/* Lienzo SVG: ocupa todo su contenedor (que ya empieza después de la paleta) */
 .bpmn-canvas .djs-container > svg {
-  flex: 1 1 0% !important;
+  position: absolute !important;
+  inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  min-width: 0 !important;
   background-color: #fafbfd !important;
   background-image: radial-gradient(circle at center, #cbd5e1 1.25px, transparent 1.25px) !important;
   background-size: 20px 20px !important;
@@ -384,14 +407,97 @@ body {
   background-image: radial-gradient(circle at center, #263040 1.25px, transparent 1.25px) !important;
 }
 
+/* Barras de desplazamiento del canvas */
+.bpmn-scrollbar {
+  position: absolute;
+  z-index: 18;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  touch-action: none;
+  user-select: none;
+}
+.bpmn-scrollbar-horizontal {
+  left: 60px;
+  right: 20px;
+  bottom: 5px;
+  height: 8px;
+}
+.bpmn-scrollbar-vertical {
+  top: 5px;
+  right: 5px;
+  bottom: 20px;
+  width: 8px;
+}
+.bpmn-palette-collapsed .bpmn-scrollbar-horizontal {
+  left: 8px;
+}
+.bpmn-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 34%, transparent);
+  transition: background-color 0.15s ease;
+}
+.bpmn-scrollbar-horizontal .bpmn-scrollbar-thumb {
+  height: 100%;
+  min-width: 36px;
+}
+.bpmn-scrollbar-vertical .bpmn-scrollbar-thumb {
+  width: 100%;
+  min-height: 36px;
+}
+.bpmn-scrollbar:hover .bpmn-scrollbar-thumb {
+  background: var(--brand, #0066cc);
+}
+
+/* Zoom del footer */
+.bpmn-zoom-slider {
+  width: 112px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--brand, #0066cc);
+}
+
 /* Context Pad moderno */
+.bpmn-canvas .djs-context-pad-parent {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 30 !important;
+  pointer-events: none !important;
+}
+
+.bpmn-canvas .djs-context-pad {
+  pointer-events: none !important;
+}
+
 .bpmn-canvas .djs-context-pad .entry {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   transition: transform 0.12s ease;
+  pointer-events: auto !important;
 }
 .bpmn-canvas .djs-context-pad .entry:hover {
   transform: scale(1.08);
+}
+
+/* Puntos de quiebre y segmentos más fáciles de agarrar */
+.bpmn-canvas .djs-bendpoint .djs-hit {
+  r: 13px;
+  cursor: move;
+}
+
+.bpmn-canvas .djs-segment-dragger .djs-hit {
+  stroke: transparent;
+  stroke-width: 10px;
+}
+
+.bpmn-canvas .djs-segment-dragger.horizontal .djs-hit {
+  cursor: ns-resize;
+}
+
+.bpmn-canvas .djs-segment-dragger.vertical .djs-hit {
+  cursor: ew-resize;
 }
 
 /* Handles de redimensionamiento visibles y con diseño refinado */
@@ -405,5 +511,151 @@ body {
   rx: 2px !important;
   ry: 2px !important;
 }
+
+/* ==========================================================================
+   Piscinas (Pools), Carriles (Lanes) y Flujos de Mensaje Punteados
+   ========================================================================== */
+
+/* Borde y fondo general de Piscinas (Participants) */
+.bpmn-canvas g.djs-element[data-element-id*="Participant"] > .djs-visual > rect,
+.bpmn-canvas g.djs-element[data-element-id*="participant"] > .djs-visual > rect,
+.bpmn-canvas g.djs-element.bpmn-participant > .djs-visual > rect {
+  fill: var(--surface) !important;
+  stroke: #94a3b8 !important;
+  stroke-width: 1.5px !important;
+}
+
+/* Carriles (Lanes) con separación nítida */
+.bpmn-canvas g.djs-element[data-element-id*="Lane"] > .djs-visual > rect,
+.bpmn-canvas g.djs-element[data-element-id*="lane"] > .djs-visual > rect,
+.bpmn-canvas g.djs-element.bpmn-lane > .djs-visual > rect {
+  fill: transparent !important;
+  stroke: #cbd5e1 !important;
+  stroke-width: 1px !important;
+}
+.dark .bpmn-canvas g.djs-element[data-element-id*="Lane"] > .djs-visual > rect,
+.dark .bpmn-canvas g.djs-element.bpmn-lane > .djs-visual > rect {
+  stroke: #334155 !important;
+}
+
+/* Divisor de encabezado de carril */
+.bpmn-canvas g.djs-element[data-element-id*="Lane"] > .djs-visual > path,
+.bpmn-canvas g.djs-element[data-element-id*="Participant"] > .djs-visual > path,
+.bpmn-canvas g.djs-element.bpmn-lane > .djs-visual > path,
+.bpmn-canvas g.djs-element.bpmn-participant > .djs-visual > path {
+  stroke: #94a3b8 !important;
+  stroke-width: 1px !important;
+}
+
+/* Tipografía de encabezados de carril en mayúsculas limpias */
+.bpmn-canvas g.djs-element[data-element-id*="Lane"] text,
+.bpmn-canvas g.djs-element[data-element-id*="lane"] text,
+.bpmn-canvas g.djs-element[data-element-id*="Participant"] text,
+.bpmn-canvas g.djs-element.bpmn-lane text,
+.bpmn-canvas g.djs-element.bpmn-participant text {
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  fill: var(--foreground) !important;
+}
+
+/* Flujos de mensajes (Message Flows) entre sistemas: Línea Punteada Distintiva */
+.bpmn-canvas g.djs-connection[data-element-id*="MessageFlow"] path.djs-visual,
+.bpmn-canvas g.djs-connection[data-element-id*="messageFlow"] path.djs-visual,
+.bpmn-canvas g.djs-connection[data-element-id*="message_flow"] path.djs-visual,
+.bpmn-canvas g.djs-connection[data-element-id*="Msg_"] path.djs-visual,
+.bpmn-canvas g.djs-connection[data-element-id*="msg_"] path.djs-visual,
+.bpmn-canvas g.djs-connection.bpmn-type-message-flow path.djs-visual {
+  stroke-dasharray: 6 4 !important;
+  stroke: #6366f1 !important;
+  stroke-width: 1.75px !important;
+}
+
+/* Marcadores de punta de flecha abierta para flujos de mensaje */
+.bpmn-canvas marker[id*="messageflow-end"] path,
+.bpmn-canvas marker[id*="MessageFlow-end"] path,
+.bpmn-canvas marker[id*="messageflow-start"] circle {
+  fill: var(--surface) !important;
+  stroke: #6366f1 !important;
+  stroke-width: 1.5px !important;
+}
+
+/* ==========================================================================
+   Clases estables aplicadas por BpmnEditor (independientes de los IDs)
+   ========================================================================== */
+
+/* Tintes suaves por carril para leer el proceso de un vistazo */
+.bpmn-canvas g.djs-element.bpmn-lane-1 > .djs-visual > rect {
+  fill: rgba(14, 165, 233, 0.045) !important;
+}
+.bpmn-canvas g.djs-element.bpmn-lane-2 > .djs-visual > rect {
+  fill: rgba(245, 158, 11, 0.05) !important;
+}
+.bpmn-canvas g.djs-element.bpmn-lane-3 > .djs-visual > rect {
+  fill: rgba(16, 185, 129, 0.045) !important;
+}
+.bpmn-canvas g.djs-element.bpmn-lane-4 > .djs-visual > rect {
+  fill: rgba(139, 92, 246, 0.045) !important;
+}
+.bpmn-canvas g.djs-element.bpmn-lane-5 > .djs-visual > rect {
+  fill: rgba(244, 63, 94, 0.04) !important;
+}
+
+/* Los colores elegidos por el usuario deben imponerse sobre los tintes decorativos */
+.bpmn-canvas g.djs-element.bpmn-custom-fill > .djs-visual > rect {
+  fill: var(--bpmn-custom-fill) !important;
+  fill-opacity: 1 !important;
+}
+.bpmn-canvas g.djs-element.bpmn-custom-stroke > .djs-visual > rect,
+.bpmn-canvas g.djs-element.bpmn-custom-stroke > .djs-visual > path {
+  stroke: var(--bpmn-custom-stroke) !important;
+}
+
+/* Flujos de mensaje: punteado índigo estable sin depender del id */
+.bpmn-canvas g.djs-connection.bpmn-message-flow path.djs-visual {
+  stroke-dasharray: 6 4 !important;
+  stroke: #6366f1 !important;
+  stroke-width: 1.75px !important;
+}
+
+/* Retorno de desviación: ámbar para distinguirlo del flujo feliz */
+.bpmn-canvas g.djs-connection.bpmn-feedback-flow path.djs-visual {
+  stroke: #d97706 !important;
+  stroke-width: 2px !important;
+}
+.bpmn-canvas g.djs-connection.bpmn-feedback-flow .djs-label {
+  fill: #b45309 !important;
+  font-weight: 600 !important;
+}
+
+/* Cinta de fases sobre el pool */
+.bpmn-canvas g.djs-element.bpmn-phase > .djs-visual > rect,
+.bpmn-canvas g.djs-element.bpmn-phase > .djs-visual > path {
+  fill: #eef2ff !important;
+  stroke: #c7d2fe !important;
+  stroke-width: 1px !important;
+  rx: 6px !important;
+  ry: 6px !important;
+}
+.bpmn-canvas g.djs-element.bpmn-phase text,
+.bpmn-canvas g.djs-element.bpmn-phase tspan {
+  fill: #4338ca !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+}
+.dark .bpmn-canvas g.djs-element.bpmn-phase > .djs-visual > rect,
+.dark .bpmn-canvas g.djs-element.bpmn-phase > .djs-visual > path,
+[data-theme="dark"] .bpmn-canvas g.djs-element.bpmn-phase > .djs-visual > rect,
+[data-theme="dark"] .bpmn-canvas g.djs-element.bpmn-phase > .djs-visual > path {
+  fill: rgba(99, 102, 241, 0.16) !important;
+  stroke: rgba(129, 140, 248, 0.55) !important;
+}
+.dark .bpmn-canvas g.djs-element.bpmn-phase text,
+.dark .bpmn-canvas g.djs-element.bpmn-phase tspan,
+[data-theme="dark"] .bpmn-canvas g.djs-element.bpmn-phase text,
+[data-theme="dark"] .bpmn-canvas g.djs-element.bpmn-phase tspan {
+  fill: #c7d2fe !important;
+}
+
 
 

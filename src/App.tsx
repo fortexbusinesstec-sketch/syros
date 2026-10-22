@@ -4,9 +4,11 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ProjectsProvider } from "@/context/ProjectsProvider";
 import { useAuth } from "@/context/useAuth";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { CourseEditorPage } from "@/pages/CourseEditorPage";
 import { DocumentEditorPage } from "@/pages/DocumentEditorPage";
 import { KnowledgeBasePage } from "@/pages/KnowledgeBasePage";
 import { LoginPage } from "@/pages/LoginPage";
+import { NoteEditorPage } from "@/pages/NoteEditorPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProjectDetailPage } from "@/pages/ProjectDetailPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
@@ -47,6 +49,8 @@ export default function App() {
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="templates/:templateId" element={<TemplateEditorPage />} />
           <Route path="knowledge" element={<KnowledgeBasePage />} />
+          <Route path="knowledge/:noteId" element={<NoteEditorPage />} />
+          <Route path="knowledge/courses/:courseId" element={<CourseEditorPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
