@@ -22,9 +22,14 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ImageEditorProps {
-  content: string;
-  onChange: (content: string) => void;
-  title: string;
+  /**
+   * JSON serializado de ImageDoc (o cadena vacía).
+   * Antes era `content`; ahora es `image` para separarlo del contenido BPMN.
+   */
+  image: string;
+  onChange: (image: string) => void;
+  /** Texto auxiliar mostrado en el área de drop cuando no hay imagen. */
+  title?: string;
 }
 
 interface UploadTicket {
@@ -33,15 +38,16 @@ interface UploadTicket {
 }
 
 /**
- * Editor de los documentos de tipo "Imagen": el diagrama (AS-IS / TO-BE) llega como
- * archivo y se guarda en Cloudflare R2. El navegador sube el binario directo a R2
- * con una URL prefirmada, así el archivo no pasa por la API.
+ * Editor de imagen: el archivo vive en Cloudflare R2.
+ * El navegador sube el binario directo a R2 con una URL prefirmada y guarda
+ * sólo la referencia (ImageDoc serializado) en el estado del padre.
  */
-export function ImageEditor({ content, onChange, title }: ImageEditorProps) {  const inputRef = useRef<HTMLInputElement>(null);
+export function ImageEditor({ image, onChange, title }: ImageEditorProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
-  const current = parseImageDoc(content);
+  const current = parseImageDoc(image);
 
   const upload = async (file: File) => {
     setError("");
@@ -207,7 +213,7 @@ export function ImageEditor({ content, onChange, title }: ImageEditorProps) {  c
             PNG, JPG, WEBP, GIF o SVG · hasta {Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB · también puedes
             pegar con Ctrl+V
           </span>
-          <span className="text-[10px] text-muted/80">{title}</span>
+          {title && <span className="text-[10px] text-muted/80">{title}</span>}
         </button>
       )}
 

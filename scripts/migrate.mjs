@@ -111,6 +111,14 @@ const migrations = [
     ],
   },
   {
+    id: "006_document_image",
+    statements: [
+      // Columna separada para la imagen adjunta en documentos de tipo "Diagrama BPMN".
+      // Permite que AS-IS / TO-BE tengan tanto el modelo BPMN como una imagen de referencia.
+      "ALTER TABLE project_documents ADD COLUMN image TEXT",
+    ],
+  },
+  {
     id: "005_imagen_format",
     statements: [
       // Nuevo tipo de plantilla: "Imagen" (el diagrama se sube a Cloudflare R2).

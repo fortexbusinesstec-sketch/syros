@@ -255,7 +255,7 @@ function NoteEditor() {
       <ContentEditor
         format="Documento"
         content={content}
-        onChange={handleChange}
+        onContentChange={handleChange}
         title={`Nota - ${note.title}`}
       />
     </div>

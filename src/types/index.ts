@@ -122,6 +122,8 @@ export interface ProjectDocument {
 
 export interface ProjectDocumentDetail extends ProjectDocument {
   content: string;
+  /** JSON serializado de ImageDoc (o cadena vacía si no hay imagen). */
+  image: string;
 }
 
 export interface Template {

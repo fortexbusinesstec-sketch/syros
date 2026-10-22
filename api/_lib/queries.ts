@@ -89,14 +89,14 @@ function mapDocument(row: Row) {
 export async function getDocument(id: string) {
   const row = await one(
     `SELECT d.id, d.project_id, p.name AS project_name, d.template_id, m.name, m.phase, m.format,
-            d.status, d.updated_at, d.content
+            d.status, d.updated_at, d.content, d.image
        FROM project_documents d
        JOIN master_templates m ON m.id = d.template_id
        JOIN projects p ON p.id = d.project_id
       WHERE d.id = ?`,
     [id],
   );
-  return row ? { ...mapDocument(row), content: str(row.content) } : null;
+  return row ? { ...mapDocument(row), content: str(row.content), image: optStr(row.image) ?? "" } : null;
 }
 
 export async function projectDocuments(projectId: string) {

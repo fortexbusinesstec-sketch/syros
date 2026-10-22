@@ -29,6 +29,7 @@ function DocumentEditor() {
   const navigate = useNavigate();
   const [document, setDocument] = useState<ProjectDocumentDetail | null>(null);
   const [content, setContent] = useState("");
+  const [image, setImage] = useState("");
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [statusError, setStatusError] = useState("");
 
@@ -38,6 +39,7 @@ function DocumentEditor() {
         .then((loaded) => {
           setDocument(loaded);
           setContent(loaded.content);
+          setImage(loaded.image ?? "");
         })
         .catch((error: unknown) =>
           setLoadError(error instanceof ApiError ? error : new ApiError(0, String(error))),
@@ -54,10 +56,10 @@ function DocumentEditor() {
     void fetchDocument();
   };
 
+  // Autosave del contenido principal (Markdown, XML BPMN, etc.)
   const autosave = useAutosave(
     useCallback(
       async (value: string) => {
-        // Sin invalidar toda la caché en cada pulsación: solo los listados de documentos.
         await apiFetch(`/documents/${documentId}`, { method: "PATCH", body: { content: value } });
         void invalidate(`/projects/${projectId}/documents`);
         void invalidate("/documents/recent");
@@ -66,9 +68,24 @@ function DocumentEditor() {
     ),
   );
 
-  const handleChange = (value: string) => {
+  // Autosave de la imagen adjunta (para documentos "Diagrama BPMN")
+  const autosaveImage = useAutosave(
+    useCallback(
+      async (value: string) => {
+        await apiFetch(`/documents/${documentId}`, { method: "PATCH", body: { image: value } });
+      },
+      [documentId],
+    ),
+  );
+
+  const handleContentChange = (value: string) => {
     setContent(value);
     autosave.schedule(value);
+  };
+
+  const handleImageChange = (value: string) => {
+    setImage(value);
+    autosaveImage.schedule(value);
   };
 
   const changeStatus = async (status: DocumentStatus) => {
@@ -111,6 +128,11 @@ function DocumentEditor() {
 
   const phase = PHASE_META[document.phase] ?? PHASE_META.Iniciación;
 
+  // El autosave principal es el indicador visible; el de imagen corre en silencio.
+  // Prioridad: saving/dirty/error del principal; si está "saved", usar el estado de imagen.
+  const saveState = autosave.state !== "saved" ? autosave.state : autosaveImage.state;
+  const saveError = autosave.error || autosaveImage.error;
+
   return (
     <div className="space-y-4">
       <Button
@@ -150,10 +172,10 @@ function DocumentEditor() {
 
         <div className="flex flex-wrap items-center gap-2">
           <SaveIndicator
-            state={autosave.state}
+            state={saveState}
             lastSavedAt={autosave.lastSavedAt}
-            error={autosave.error}
-            onSave={() => void autosave.flush()}
+            error={saveError}
+            onSave={() => { void autosave.flush(); void autosaveImage.flush(); }}
           />
           <Dropdown>
             <Dropdown.Trigger
@@ -201,7 +223,9 @@ function DocumentEditor() {
       <ContentEditor
         format={document.format}
         content={content}
-        onChange={handleChange}
+        onContentChange={handleContentChange}
+        image={image}
+        onImageChange={handleImageChange}
         title={`${document.project_name} - ${document.name}`}
       />
     </div>

@@ -200,6 +200,7 @@ export const RESOURCES: Record<string, Resource> = {
       project_id: { kind: "ref", table: "projects", required: true },
       template_id: { kind: "ref", table: "master_templates", required: true },
       content: { kind: "text", max: MAX_CONTENT },
+      image: { kind: "text", max: 2000 },
       status: { kind: "enum", values: DOCUMENT_STATUSES },
     },
   },

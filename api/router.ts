@@ -153,6 +153,13 @@ async function route(request: Request): Promise<Response> {
       if (!document) throw new HttpError(404, "Documento no encontrado");
       return json(document);
     }
+    if (id && method === "PATCH") {
+      return json(await updateRecord(RESOURCES.documents, id, await readJson(request)));
+    }
+    if (id && method === "DELETE") {
+      await deleteRecord(RESOURCES.documents, id);
+      return noContent();
+    }
   }
 
   // --- Imágenes en Cloudflare R2 ---

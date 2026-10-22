@@ -283,7 +283,7 @@ function TemplateEditor() {
       <ContentEditor
         format={template.format}
         content={content}
-        onChange={handleChange}
+        onContentChange={handleChange}
         title={`Plantilla - ${template.name}`}
       />
     </div>

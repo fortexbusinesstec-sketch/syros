@@ -254,7 +254,7 @@ function CourseEditor() {
       <ContentEditor
         format="Documento"
         content={content}
-        onChange={handleChange}
+        onContentChange={handleChange}
         title={`Apuntes - ${course.name}`}
       />
     </div>
