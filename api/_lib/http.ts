@@ -25,6 +25,16 @@ export function noContent(headers: HeadersInit = {}): Response {
   return response;
 }
 
+/** Redirección temporal: la usamos para mandar al cliente a la URL prefirmada de R2. */
+export function redirect(location: string, headers: HeadersInit = {}): Response {
+  const response = new Response(null, {
+    status: 302,
+    headers: { Location: location, "Cache-Control": "private, max-age=60" },
+  });
+  new Headers(headers).forEach((value, key) => response.headers.append(key, value));
+  return response;
+}
+
 export async function readJson(request: Request): Promise<Record<string, unknown>> {
   if (!request.headers.get("content-type")?.includes("application/json")) {
     throw new HttpError(415, "El cuerpo debe ser JSON");

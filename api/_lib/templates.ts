@@ -5,7 +5,10 @@ import { RESOURCES } from "./resources.js";
 import { validate } from "./validate.js";
 
 function defaultContent(format: string, name: string): string {
-  return format === "Diagrama BPMN" ? emptyBpmn(name) : `# ${name}\n`;
+  if (format === "Diagrama BPMN") return emptyBpmn(name);
+  // El contenido de una plantilla "Imagen" es el fileId del archivo subido: empieza vacío.
+  if (format === "Imagen") return "";
+  return `# ${name}\n`;
 }
 
 export async function createTemplate(body: Record<string, unknown>) {
@@ -30,6 +33,28 @@ export async function createTemplate(body: Record<string, unknown>) {
       nowSeconds(),
     ],
   });
+  return { id };
+}
+
+/**
+ * Actualiza una plantilla. Si cambia el formato, el contenido se reinicia: el XML BPMN
+ * no significa nada en una plantilla de imagen (y al revés).
+ */
+export async function updateTemplate(id: string, body: Record<string, unknown>) {
+  const values = await validate(body, RESOURCES.templates.schema, true);
+  const current = await one("SELECT format FROM master_templates WHERE id = ?", [id]);
+  if (!current) throw new HttpError(404, "Plantilla no encontrada");
+  const format = (values.format as string | null) ?? str(current.format);
+  // El contenido depende del formato (XML BPMN vs. JSON de imagen): si cambia, se reinicia.
+  if (format !== str(current.format)) values.content = "";
+  values.updated_at = nowSeconds();
+  const columns = Object.keys(values);
+  if (!columns.length) throw new HttpError(400, "No hay campos para actualizar");
+  const result = await db().execute({
+    sql: `UPDATE master_templates SET ${columns.map((column) => `${column} = ?`).join(", ")} WHERE id = ?`,
+    args: [...Object.values(values), id],
+  });
+  if (!result.rowsAffected) throw new HttpError(404, "Plantilla no encontrada");
   return { id };
 }
 

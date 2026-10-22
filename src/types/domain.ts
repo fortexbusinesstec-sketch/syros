@@ -29,8 +29,12 @@ export const REMINDER_STATUSES = ["Pendiente", "En Proceso", "Completado"] as co
 
 export const DOCUMENT_STATUSES = ["Borrador", "En Revisión", "Aprobado"] as const;
 
-/** Documento: editor enriquecido (Markdown + tablas + Mermaid). Diagrama BPMN: XML BPMN 2.0. */
-export const TEMPLATE_FORMATS = ["Documento", "Diagrama BPMN"] as const;
+/**
+ * Documento: editor enriquecido (Markdown + tablas + Mermaid).
+ * Diagrama BPMN: XML BPMN 2.0 modelado con bpmn-js.
+ * Imagen: archivo subido a Cloudflare R2 (el diagrama AS-IS / TO-BE lo aporta el usuario).
+ */
+export const TEMPLATE_FORMATS = ["Documento", "Diagrama BPMN", "Imagen"] as const;
 
 export const INFLUENCE_LEVELS = ["Alta", "Media", "Baja"] as const;
 

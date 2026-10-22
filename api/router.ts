@@ -1,7 +1,8 @@
 import { changePassword, getSessionUser, login, logout, requireUser } from "./_lib/auth.js";
 import { db, nowSeconds } from "./_lib/db.js";
-import { HttpError, assertSameOrigin, json, noContent, readJson } from "./_lib/http.js";
+import { HttpError, assertSameOrigin, json, noContent, readJson, redirect } from "./_lib/http.js";
 import { createProject, deleteProject, updateProject } from "./_lib/projects.js";
+import { presignDownload, presignUpload, removeFile } from "./_lib/r2.js";
 import {
   getCourse,
   getDocument,
@@ -23,7 +24,7 @@ import {
   summary,
 } from "./_lib/queries.js";
 import { RESOURCES, createRecord, deleteRecord, updateRecord } from "./_lib/resources.js";
-import { createDocument, createTemplate, deleteTemplate, seedBaseTemplates } from "./_lib/templates.js";
+import { createDocument, createTemplate, deleteTemplate, seedBaseTemplates, updateTemplate } from "./_lib/templates.js";
 
 const RECENT_WINDOW = 7 * 24 * 60 * 60;
 
@@ -132,6 +133,9 @@ async function route(request: Request): Promise<Response> {
       if (!template) throw new HttpError(404, "Plantilla no encontrada");
       return json(template);
     }
+    if (id && method === "PATCH") {
+      return json(await updateTemplate(id, await readJson(request)));
+    }
     if (id && method === "DELETE") {
       await deleteTemplate(id);
       return noContent();
@@ -148,6 +152,24 @@ async function route(request: Request): Promise<Response> {
       const document = await getDocument(id);
       if (!document) throw new HttpError(404, "Documento no encontrado");
       return json(document);
+    }
+  }
+
+  // --- Imágenes en Cloudflare R2 ---
+  // El navegador pide una URL prefirmada, sube el archivo directo a R2 y guarda el fileId.
+  if (head === "uploads" && id === "presign" && !sub && method === "POST") {
+    return json(await presignUpload(await readJson(request)));
+  }
+
+  if (head === "files" && id && !sub) {
+    if (method === "GET") {
+      const params = new URL(request.url).searchParams;
+      const name = params.get("name") ?? undefined;
+      return redirect(await presignDownload(id, name));
+    }
+    if (method === "DELETE") {
+      await removeFile(id);
+      return noContent();
     }
   }
 

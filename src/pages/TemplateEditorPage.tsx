@@ -18,7 +18,8 @@ import { ApiError, apiFetch, invalidate, mutate } from "@/lib/api";
 import { PROJECT_PHASES } from "@/lib/constants";
 import { useAutosave } from "@/lib/useAutosave";
 import { plural } from "@/lib/utils";
-import type { ProjectPhase, TemplateDetail } from "@/types";
+import { TEMPLATE_FORMATS } from "@/types/domain";
+import type { ProjectPhase, TemplateDetail, TemplateFormat } from "@/types";
 
 /** Un editor por plantilla: así un guardado pendiente nunca se aplica a otra plantilla. */
 export function TemplateEditorPage() {
@@ -31,7 +32,7 @@ function TemplateEditor() {
   const navigate = useNavigate();
   const [template, setTemplate] = useState<TemplateDetail | null>(null);
   const [content, setContent] = useState("");
-  const [meta, setMeta] = useState({ name: "", phase: "Iniciación" as ProjectPhase, description: "" });
+  const [meta, setMeta] = useState({ name: "", phase: "Iniciación" as ProjectPhase, format: "Documento" as TemplateFormat, description: "" });
   const [metaState, setMetaState] = useState<"idle" | "saving" | "saved">("idle");
   const [actionError, setActionError] = useState("");
   const [loadError, setLoadError] = useState<ApiError | null>(null);
@@ -42,7 +43,7 @@ function TemplateEditor() {
         .then((loaded) => {
           setTemplate(loaded);
           setContent(loaded.content);
-          setMeta({ name: loaded.name, phase: loaded.phase, description: loaded.description ?? "" });
+          setMeta({ name: loaded.name, phase: loaded.phase, format: loaded.format, description: loaded.description ?? "" });
         })
         .catch((error: unknown) =>
           setLoadError(error instanceof ApiError ? error : new ApiError(0, String(error))),
@@ -78,6 +79,7 @@ function TemplateEditor() {
     template !== null &&
     (meta.name.trim() !== template.name ||
       meta.phase !== template.phase ||
+      meta.format !== template.format ||
       meta.description.trim() !== (template.description ?? ""));
 
   const saveMeta = async (event: FormEvent<HTMLFormElement>) => {
@@ -89,14 +91,18 @@ function TemplateEditor() {
       await mutate("PATCH", `/templates/${template.id}`, {
         name: meta.name.trim(),
         phase: meta.phase,
+        format: meta.format,
         description: meta.description.trim(),
       });
       setTemplate({
         ...template,
         name: meta.name.trim(),
         phase: meta.phase,
+        format: meta.format,
         description: meta.description.trim() || null,
       });
+      // El contenido depende del formato: si cambió, el que estaba en memoria ya no aplica.
+      if (meta.format !== template.format) setContent("");
       setMetaState("saved");
       window.setTimeout(() => setMetaState("idle"), 2000);
     } catch (error) {
@@ -180,7 +186,7 @@ function TemplateEditor() {
 
       <Card className="border border-border/80 bg-surface shadow-none">
         <Card.Content className="p-4">
-          <form onSubmit={saveMeta} className="grid gap-3 md:grid-cols-[1fr_200px_1.4fr_auto] md:items-end">
+          <form onSubmit={saveMeta} className="grid gap-3 md:grid-cols-[1fr_170px_170px_1.4fr_auto] md:items-end">
             <TextField
               value={meta.name}
               onChange={(name) => setMeta((current) => ({ ...current, name }))}
@@ -208,6 +214,30 @@ function TemplateEditor() {
                   {PROJECT_PHASES.map((phase) => (
                     <ListBox.Item key={phase} id={phase} textValue={phase}>
                       {phase}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+            <Select
+              value={meta.format}
+              onChange={(key) =>
+                key !== null && setMeta((current) => ({ ...current, format: String(key) as TemplateFormat }))
+              }
+              variant="secondary"
+              fullWidth
+            >
+              <Label>Tipo</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {TEMPLATE_FORMATS.map((format) => (
+                    <ListBox.Item key={format} id={format} textValue={format}>
+                      {format}
                       <ListBox.ItemIndicator />
                     </ListBox.Item>
                   ))}
@@ -245,6 +275,7 @@ function TemplateEditor() {
             {template.document_count === 1 && " El documento ya creado conserva su propio contenido."}
             {template.document_count > 1 &&
               ` Los ${plural(template.document_count, "documento")} ya creados conservan su propio contenido.`}
+            {" Cambiar el tipo reinicia el contenido de la plantilla (el XML BPMN y la imagen no son compatibles)."}
           </p>
         </Card.Content>
       </Card>

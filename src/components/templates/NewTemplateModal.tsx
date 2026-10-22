@@ -29,6 +29,7 @@ interface NewTemplateModalProps {
 const formatHelp: Record<TemplateFormat, string> = {
   Documento: "Editor con títulos, listas, tablas estructuradas, diagramas Mermaid y código.",
   "Diagrama BPMN": "Modelador de procesos BPMN 2.0, ideal para el AS-IS y el TO-BE.",
+  Imagen: "Sube el diagrama como imagen (PNG, JPG, WEBP, GIF o SVG) a tu bucket de Cloudflare R2.",
 };
 
 export function NewTemplateModal({

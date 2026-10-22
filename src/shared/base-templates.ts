@@ -156,16 +156,16 @@ export const BASE_TEMPLATES: BaseTemplate[] = [
   {
     phase: "Sistemas y Procesos",
     name: "Proceso AS-IS",
-    format: "Diagrama BPMN",
-    description: "Diagrama BPMN del proceso tal como funciona hoy.",
-    content: emptyBpmn("Proceso AS-IS"),
+    format: "Imagen",
+    description: "Diagrama del proceso tal como funciona hoy (imagen del BPMN o del flujo real).",
+    content: "",
   },
   {
     phase: "Sistemas y Procesos",
     name: "Proceso TO-BE",
-    format: "Diagrama BPMN",
-    description: "Diagrama BPMN del proceso objetivo, ya mejorado o automatizado.",
-    content: emptyBpmn("Proceso TO-BE"),
+    format: "Imagen",
+    description: "Diagrama del proceso objetivo, ya mejorado o automatizado.",
+    content: "",
   },
   {
     phase: "Datos e Integración",

@@ -2,11 +2,9 @@ import { useState } from "react";
 import { Button, Card } from "@heroui/react";
 import {
   ArrowUpRight,
-  FileText,
   LayoutTemplate,
   Plus,
   Sparkles,
-  Workflow,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -17,7 +15,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { NewTemplateModal } from "@/components/templates/NewTemplateModal";
 import { ApiError, mutate, useApi } from "@/lib/api";
-import { PHASE_META, PROJECT_PHASES } from "@/lib/constants";
+import { PHASE_META, PROJECT_PHASES, templateIcon } from "@/lib/constants";
 import { cn, formatDate, plural } from "@/lib/utils";
 import type { ProjectPhase, Template } from "@/types";
 
@@ -138,7 +136,7 @@ export function TemplatesPage() {
               {items.length ? (
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {items.map((template) => {
-                    const Icon = template.format === "Diagrama BPMN" ? Workflow : FileText;
+                    const Icon = templateIcon(template.format);
                     return (
                       <Card
                         key={template.id}

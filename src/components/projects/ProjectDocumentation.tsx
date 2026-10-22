@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Button, Card, Chip } from "@heroui/react";
-import { ArrowUpRight, FilePlus2, FileText, LayoutTemplate, Workflow } from "lucide-react";
+import { ArrowUpRight, FilePlus2, LayoutTemplate } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/StateMessage";
 import { ApiError, mutate, useApi } from "@/lib/api";
-import { DOCUMENT_STATUS_COLOR, PHASE_META, PROJECT_PHASES } from "@/lib/constants";
+import { DOCUMENT_STATUS_COLOR, PHASE_META, PROJECT_PHASES, templateIcon } from "@/lib/constants";
 import { cn, formatDate } from "@/lib/utils";
 import type { Project, ProjectDocument, Template } from "@/types";
 
@@ -150,7 +150,7 @@ export function ProjectDocumentation({ project }: { project: Project }) {
               <Card.Content className="divide-y divide-border/70 p-0">
                 {items.map((template) => {
                   const document = documentsByTemplate.get(template.id);
-                  const Icon = template.format === "Diagrama BPMN" ? Workflow : FileText;
+                  const Icon = templateIcon(template.format);
                   return (
                     <div key={template.id} className="flex items-center gap-3 px-4 py-3">
                       <span

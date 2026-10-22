@@ -110,6 +110,26 @@ const migrations = [
           AND id NOT IN (SELECT template_id FROM project_documents)`,
     ],
   },
+  {
+    id: "005_imagen_format",
+    statements: [
+      // Nuevo tipo de plantilla: "Imagen" (el diagrama se sube a Cloudflare R2).
+      "UPDATE master_templates SET format = 'Documento' WHERE format IS NULL OR format NOT IN ('Documento', 'Diagrama BPMN', 'Imagen')",
+      // AS-IS / TO-BE pasan a ser de imagen, pero solo si el diagrama BPMN sigue vacío:
+      // un diagrama con 4 o más elementos <bpmn:> ya tiene trabajo hecho y se respeta.
+      `UPDATE master_templates
+          SET format = 'Imagen', content = '', updated_at = CAST(unixepoch() AS INT)
+        WHERE name IN ('Proceso AS-IS', 'Proceso TO-BE')
+          AND format = 'Diagrama BPMN'
+          AND (content IS NULL OR (length(content) - length(replace(content, '<bpmn:', ''))) / length('<bpmn:') <= 3)
+          AND NOT EXISTS (
+            SELECT 1 FROM project_documents d
+             WHERE d.template_id = master_templates.id
+               AND d.content IS NOT NULL
+               AND (length(d.content) - length(replace(d.content, '<bpmn:', ''))) / length('<bpmn:') > 3
+          )`,
+    ],
+  },
 ];
 
 await db.execute(`CREATE TABLE IF NOT EXISTS schema_migrations (

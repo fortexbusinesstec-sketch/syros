@@ -1,9 +1,11 @@
 ﻿import type { ChipProps } from "@heroui/react";
+import { FileText, ImageIcon, Workflow } from "lucide-react";
 import type {
   DocumentStatus,
   KanbanStatus,
   ProjectPhase,
   ProjectStatus,
+  TemplateFormat,
 } from "@/types";
 
 export { PROJECT_PHASES, PROJECT_STATUSES } from "@/types/domain";
@@ -122,3 +124,10 @@ export const KANBAN_LABELS: Record<KanbanStatus, string> = {
   Blocked: "Bloqueado",
   Done: "Hecho",
 };
+
+/** Icono que representa cada tipo de plantilla. */
+export function templateIcon(format: TemplateFormat) {
+  if (format === "Diagrama BPMN") return Workflow;
+  if (format === "Imagen") return ImageIcon;
+  return FileText;
+}
